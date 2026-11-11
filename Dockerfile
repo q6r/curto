@@ -18,7 +18,7 @@ RUN mkdir /data && touch /data/.keep
 
 # ---- runtime ---------------------------------------------------------------
 # Chiseled Ubuntu: no shell, no package manager, runs as the unprivileged "app" user (UID 1654) by default.
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 
 LABEL org.opencontainers.image.title="curto" \
       org.opencontainers.image.description="Self-hosted URL shortener with privacy-first live analytics" \
