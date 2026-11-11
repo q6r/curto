@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Curto.Api/Curto.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Curto.Api.Tests/Curto.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/Curto.DemoHistory/Curto.DemoHistory.csproj" />
+  </Folder>
+</Solution>

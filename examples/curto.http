@@ -1,0 +1,99 @@
+# curto API tour for the VS Code "REST Client" extension and the JetBrains HTTP client.
+# Start the server first (see CONTRIBUTING.md), then send the requests top to bottom.
+
+@host = http://127.0.0.1:5080
+@key = local-development-key-123
+@slug = hello
+
+### Liveness: the process is up (no key needed)
+GET {{host}}/healthz
+
+### Readiness: the database answers, plus click-pipeline counters
+GET {{host}}/readyz
+
+### Create a link with a custom slug, a title and tags
+POST {{host}}/api/links
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{
+  "url": "https://example.com/blog/hello-world",
+  "slug": "{{slug}}",
+  "title": "Hello world",
+  "tags": ["blog", "launch"]
+}
+
+### Create a link with a random 7-character slug, a click budget and an expiry
+POST {{host}}/api/links
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{
+  "url": "https://example.com/limited-offer",
+  "title": "Limited offer",
+  "maxClicks": 100,
+  "expiresAt": "2030-01-01T00:00:00Z"
+}
+
+### A validation error: every problem is reported, keyed by field name
+POST {{host}}/api/links
+X-API-Key: {{key}}
+Content-Type: application/json
+
+{
+  "url": "ftp://example.com/file",
+  "slug": "a",
+  "tags": ["ok", "not ok!"]
+}
+
+### Read one link
+GET {{host}}/api/links/{{slug}}
+X-API-Key: {{key}}
+
+### List links: filter by text and status, sort by clicks, page with limit and offset
+GET {{host}}/api/links?query=hello&status=active&sort=clicks&dir=desc&limit=20&offset=0
+X-API-Key: {{key}}
+
+### Update with a JSON merge patch: present fields change, null clears, absent fields stay
+PATCH {{host}}/api/links/{{slug}}
+X-API-Key: {{key}}
+Content-Type: application/merge-patch+json
+
+{
+  "title": "Hello again",
+  "tags": ["blog"],
+  "maxClicks": null
+}
+
+### The public redirect: answers 302 and records a click (this client does not follow it)
+# @no-redirect
+GET {{host}}/{{slug}}
+Referer: https://news.ycombinator.com/item?id=1
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0
+
+### A HEAD request is a link check, not a visit: same answer, nothing recorded
+# @no-redirect
+HEAD {{host}}/{{slug}}
+
+### QR code of the short URL as SVG (public)
+GET {{host}}/qr/{{slug}}.svg?size=192&dark=1a2b3c&light=ffffff
+
+### Statistics across all links: 24h, 7d, 30d or 90d
+GET {{host}}/api/stats/overview?range=7d
+X-API-Key: {{key}}
+
+### Statistics of one link (same shape; links.total is 1)
+GET {{host}}/api/links/{{slug}}/stats?range=30d
+X-API-Key: {{key}}
+
+### Live click stream (Server-Sent Events). Leave it open and click the short link elsewhere.
+GET {{host}}/api/events
+X-API-Key: {{key}}
+Accept: text/event-stream
+
+### No key: 401 with a WWW-Authenticate challenge and a problem document
+GET {{host}}/api/links
+
+### Delete the link and its analytics
+DELETE {{host}}/api/links/{{slug}}
+X-API-Key: {{key}}

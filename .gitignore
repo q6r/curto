@@ -1,0 +1,43 @@
+# Build output
+bin/
+obj/
+dist/
+out/
+publish/
+artifacts/
+
+# Test and coverage output
+TestResults/
+coverage/
+*.trx
+*.coverage
+
+# Runtime data: the SQLite database and its WAL companions never belong in git
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Logs and local environment
+*.log
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+
+# Screenshot tooling scratch
+_shots/
+
+# IDE and OS files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+.DS_Store
+Thumbs.db

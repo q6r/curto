@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore Curto.slnx
+
+      - name: Build (every warning is an error)
+        run: dotnet build Curto.slnx -c Release --no-restore -warnaserror
+
+      - name: Format check
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet format Curto.slnx --verify-no-changes --no-restore
+
+      - name: Test
+        run: dotnet test Curto.slnx -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults/
+          retention-days: 7
+
+  dashboard:
+    name: Dashboard asset check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: JavaScript syntax
+        run: |
+          for file in src/Curto.Api/wwwroot/*.js; do
+            echo "node --check $file"
+            node --check "$file"
+          done
+
+      - name: Static layer tests (CSP, content types, caching, no external origins)
+        run: dotnet test Curto.slnx -c Release --filter "FullyQualifiedName~Dashboard" --verbosity normal
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: curto:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (read-only root file system, as in docker-compose.yml)
+        run: |
+          docker volume create curto-ci-data
+          docker run -d --name curto --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -v curto-ci-data:/data \
+            -e CURTO_API_KEY=ci-smoke-test-key-0123456789 -p 127.0.0.1:8080:8080 curto:ci
+
+          status=starting
+          for _ in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' curto)
+            [ "$status" = "healthy" ] && break
+            sleep 2
+          done
+          echo "container health: $status"
+          [ "$status" = "healthy" ] || { docker logs curto; exit 1; }
+
+          user=$(docker inspect --format '{{.Config.User}}' curto)
+          echo "runs as user: ${user:-root}"
+          if [ -z "$user" ] || [ "$user" = "0" ] || [ "$user" = "root" ]; then
+            echo "the container must not run as root"
+            exit 1
+          fi
+
+          curl -fsS http://127.0.0.1:8080/healthz
+          echo
+          curl -fsS -o /dev/null -w 'dashboard: %{http_code} %{content_type}\n' http://127.0.0.1:8080/
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/links)
+          echo "unauthenticated /api/links: $code"
+          if [ "$code" != "401" ]; then
+            echo "expected 401 without the API key"
+            exit 1
+          fi
+
+      - name: Container logs
+        if: always()
+        run: docker logs curto || true
